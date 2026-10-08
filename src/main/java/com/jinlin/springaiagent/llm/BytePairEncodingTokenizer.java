@@ -14,7 +14,7 @@ public class BytePairEncodingTokenizer {
     private int nextTokenId = 0;
 
     public BytePairEncodingTokenizer() {
-        // 初始化特殊词元与单字符基础词表
+        // 初始化特殊词元与基础字典
         registerToken("<unk>");
         registerToken("<s>");
         registerToken("</s>");
@@ -29,23 +29,24 @@ public class BytePairEncodingTokenizer {
         return tokenToIdMap.get(token);
     }
 
-    // 基于输入语料学习构建指定规模的 BPE 词表
+    // 基于输入语料迭代学习构建指定规模的 BPE 词表
     public void train(List<String> corpus, int targetVocabSize) {
-        // 初始切分为单字符序列
+        List<List<String>> tokenizedCorpus = new ArrayList<>();
         for (String text : corpus) {
-            for (char ch : text.toCharArray()) {
-                registerToken(String.valueOf(ch));
+            List<String> chars = splitIntoCharacters(text);
+            for (String ch : chars) {
+                registerToken(ch);
             }
+            tokenizedCorpus.add(chars);
         }
 
         while (tokenToIdMap.size() < targetVocabSize) {
             Map<String, Integer> pairCounts = new HashMap<>();
 
-            // 统计所有相邻词对出现频次
-            for (String text : corpus) {
-                List<String> pieces = splitIntoCharacters(text);
-                for (int i = 0; i < pieces.size() - 1; i++) {
-                    String pairKey = pieces.get(i) + "##" + pieces.get(i + 1);
+            // 统计当前语料切分中所有相邻词对的频次
+            for (List<String> words : tokenizedCorpus) {
+                for (int i = 0; i < words.size() - 1; i++) {
+                    String pairKey = words.get(i) + "##" + words.get(i + 1);
                     pairCounts.put(pairKey, pairCounts.getOrDefault(pairKey, 0) + 1);
                 }
             }
@@ -54,13 +55,40 @@ public class BytePairEncodingTokenizer {
                 break;
             }
 
-            // 选取频次最高的词对执行合并
-            String bestPair = Collections.max(pairCounts.entrySet(), Map.Entry.comparingByValue()).getKey();
-            String[] parts = bestPair.split("##");
-            String mergedToken = parts[0] + parts[1];
+            // 找出出现频次最高的相邻对
+            Map.Entry<String, Integer> maxEntry = null;
+            for (Map.Entry<String, Integer> entry : pairCounts.entrySet()) {
+                if (maxEntry == null || entry.getValue() > maxEntry.getValue()) {
+                    maxEntry = entry;
+                }
+            }
 
-            mergeRules.add(new String[]{parts[0], parts[1]});
+            if (maxEntry == null || maxEntry.getValue() < 1) {
+                break;
+            }
+
+            String[] bestPair = maxEntry.getKey().split("##");
+            String mergedToken = bestPair[0] + bestPair[1];
+            mergeRules.add(new String[]{bestPair[0], bestPair[1]});
             registerToken(mergedToken);
+
+            // 更新语料状态 合并对应词对
+            List<List<String>> nextCorpus = new ArrayList<>();
+            for (List<String> words : tokenizedCorpus) {
+                List<String> mergedWords = new ArrayList<>();
+                int i = 0;
+                while (i < words.size()) {
+                    if (i < words.size() - 1 && words.get(i).equals(bestPair[0]) && words.get(i + 1).equals(bestPair[1])) {
+                        mergedWords.add(mergedToken);
+                        i += 2;
+                    } else {
+                        mergedWords.add(words.get(i));
+                        i++;
+                    }
+                }
+                nextCorpus.add(mergedWords);
+            }
+            tokenizedCorpus = nextCorpus;
         }
     }
 
