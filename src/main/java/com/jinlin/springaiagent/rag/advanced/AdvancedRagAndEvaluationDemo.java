@@ -116,13 +116,14 @@ public class AdvancedRagAndEvaluationDemo {
         // 仲裁可信知识
         public SourcedDocument arbitrate(List<SourcedDocument> conflictingDocs) {
             System.out.println("知识冲突检测 发现多份文档规则存在分歧 启动权威度与时效性加权仲裁");
-            conflictingDocs.sort((a, b) -> {
+            List<SourcedDocument> sorted = new ArrayList<>(conflictingDocs);
+            sorted.sort((a, b) -> {
                 if (a.authorityWeight != b.authorityWeight) {
                     return Integer.compare(b.authorityWeight, a.authorityWeight);
                 }
                 return Long.compare(b.updateTime, a.updateTime);
             });
-            SourcedDocument best = conflictingDocs.get(0);
+            SourcedDocument best = sorted.get(0);
             System.out.println("冲突仲裁胜出来源 " + best.sourceName + " 最终采纳内容 " + best.ruleContent);
             return best;
         }
